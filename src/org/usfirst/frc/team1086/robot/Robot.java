@@ -24,14 +24,14 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import jaci.pathfinder.Pathfinder;
 import jaci.pathfinder.Trajectory;
 import jaci.pathfinder.Waypoint;
-import jaci.pathfinder.followers.EncoderFollower;
 import jaci.pathfinder.modifiers.TankModifier;
 
 public class Robot extends TimedRobot {
 	Joystick leftStick, rightStick, auxStick;
 	
 	Waypoint[] points;
-	EncoderFollower left, right;
+	EncoderFollower left; 
+	jaci.pathfinder.followers.EncoderFollower right;
 	TalonSRX talonFrontLeft, talonFrontRight, talonBackLeft, talonBackRight;
 	AHRS vmx;
 	
@@ -61,13 +61,12 @@ public class Robot extends TimedRobot {
 			System.out.println("VMX is null");
 		}
 		
-		
 		//The first int is pidIdx - 0 for primary closed loop, 1 for cascaded closed loop
 		//The second int is timeoutMs - >0 will timeout error if it times out, 0 means dont check at all
 		talonFrontLeft.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, 0);
 		talonFrontRight.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, 0);
 	
-		turnController = new PIDController(.012, 0, 0.015, new PIDSource() {
+		turnController = new PIDController(.04, 0, 0.02, new PIDSource() {
 			@Override public void setPIDSourceType(PIDSourceType pidSource) {}
 
 			@Override
@@ -103,8 +102,10 @@ public class Robot extends TimedRobot {
 	public void teleopInit() {
 		points = new Waypoint[] {
 				new Waypoint(0, 0, 0),
-				new Waypoint(2, 0, 0),
-				new Waypoint(3, 0, 0),
+				new Waypoint(1.5, 1.5, Pathfinder.d2r(90)),
+				new Waypoint(0, 3, Pathfinder.d2r(180)),
+				new Waypoint(-1.5, 1.5, Pathfinder.d2r(-90)),
+				new Waypoint(0, 0,0)
 		};
 		talonFrontLeft.setSelectedSensorPosition(0, 0, 0);
 		talonFrontRight.setSelectedSensorPosition(0, 0, 0);
@@ -120,7 +121,7 @@ public class Robot extends TimedRobot {
 		
 		
 		if(leftStick.getRawButton(1))
-			drive(-leftStick.getY(), rightStick.getX(), leftStick.getX());
+			drive(-leftStick.getY() * Math.abs(leftStick.getY()), rightStick.getX() * Math.abs(rightStick.getX()), leftStick.getX() * Math.abs(leftStick.getX()));
 		else drive(0, 0, 0);
 	
 		if(auxStick.getRawButton(2)) {
@@ -129,27 +130,27 @@ public class Robot extends TimedRobot {
 		
 		if(auxStick.getRawButtonPressed(3)) {
 			double dt = 0.02;
-			double maxVelocity = 2.848;
-			double maxAcceleration = 2.0;
+			double maxVelocity = 3.048;
+			double maxAcceleration = .7;
 			double maxJerk = 60.0;
 			Trajectory.Config config = new Trajectory.Config(Trajectory.FitMethod.HERMITE_CUBIC,
 					Trajectory.Config.SAMPLES_FAST, dt, maxVelocity, maxAcceleration, maxJerk);
 			Trajectory trajectory = Pathfinder.generate(points, config);
-			double wheelbaseWidth = 0.6; //Distance between the two sides of DT, in meters.
+			double wheelbaseWidth = 0.584; //Distance between the two sides of DT, in meters.
 			TankModifier modifier = new TankModifier(trajectory).modify(wheelbaseWidth);
 			
 			left = new EncoderFollower(modifier.getLeftTrajectory());
-			right = new EncoderFollower(modifier.getRightTrajectory());
+			right = new jaci.pathfinder.followers.EncoderFollower(modifier.getRightTrajectory());
 			
 			//configureEncoder(encoderPosition, encoderTickPerRevolution, wheelDiameter)
-			left.configureEncoder(talonFrontLeft.getSelectedSensorPosition(0), 4096, .1524);
-			right.configureEncoder(talonFrontRight.getSelectedSensorPosition(0), 4096, .1524);
+			left.configureEncoder(talonFrontLeft.getSelectedSensorPosition(0), 4096, .1524 / 1.07);
+			right.configureEncoder(talonFrontRight.getSelectedSensorPosition(0), 4096, .1524 / 1.07);
 		
-			double p = .4;
+			double p = 1;
 			double i = 0;
-			double d = 0;
-			double velocityInverse = 1/maxVelocity;
-			double accelGain = 1 / maxAcceleration;
+			double d = 0.5;
+			double velocityInverse = 1 / maxVelocity;
+			double accelGain = 0;
 			left.configurePIDVA(p, i, d, velocityInverse, accelGain);
 			right.configurePIDVA(p, i, d, velocityInverse, accelGain);
 			
@@ -161,8 +162,8 @@ public class Robot extends TimedRobot {
 		}
 		if(auxStick.getRawButton(3)) { 
 			if(!left.isFinished() && !right.isFinished()) {
-				double leftSpeed = left.calculate(talonFrontLeft.getSelectedSensorPosition(0)) / 4;
-				double rightSpeed = right.calculate(talonFrontRight.getSelectedSensorPosition(0)) / 4;
+				double leftSpeed = left.calculate(talonFrontLeft.getSelectedSensorPosition(0), talonFrontLeft.getSelectedSensorVelocity(0) / 4096.0 * .1524 * Math.PI);
+				double rightSpeed = right.calculate(talonFrontRight.getSelectedSensorPosition(0));
 				double gyroHeading = vmx.getAngle();
 				double desiredHeading = Pathfinder.r2d(left.getHeading());
 				angleDifference = Pathfinder.boundHalfDegrees(desiredHeading + gyroHeading);
@@ -176,11 +177,11 @@ public class Robot extends TimedRobot {
 				
 				//System.out.println("Left speed: " + leftSpeed);
 				//System.out.println("Right speed: " + rightSpeed);
-				System.out.println("Turn: " + turn);
-				System.out.println("MP Target Turn " +  Pathfinder.r2d(left.getHeading()));
+				//System.out.println("Turn: " + turn);
+				//System.out.println("MP Target Turn " +  Pathfinder.r2d(left.getHeading()));
 				try {
 
-					System.out.println("MP Setpoint Turn " + Pathfinder.r2d(left.getSegment().heading));
+					//System.out.println("MP Setpoint Turn " + Pathfinder.r2d(left.getSegment().heading));
 				} catch(Exception e) {System.out.println("End ");}
 				
 				talonFrontLeft.set(ControlMode.PercentOutput, leftSpeed + turn);
