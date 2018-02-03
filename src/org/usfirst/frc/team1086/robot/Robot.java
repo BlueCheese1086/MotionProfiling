@@ -8,6 +8,7 @@
 package org.usfirst.frc.team1086.robot;
 
 import java.io.File;
+import java.nio.file.Path;
 
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.FeedbackDevice;
@@ -31,7 +32,7 @@ public class Robot extends TimedRobot {
 	
 	Waypoint[] points;
 	EncoderFollower left; 
-	jaci.pathfinder.followers.EncoderFollower right;
+	EncoderFollower right;
 	TalonSRX talonFrontLeft, talonFrontRight, talonBackLeft, talonBackRight;
 	AHRS vmx;
 	
@@ -102,10 +103,12 @@ public class Robot extends TimedRobot {
 	public void teleopInit() {
 		points = new Waypoint[] {
 				new Waypoint(0, 0, 0),
-				new Waypoint(1.5, 1.5, Pathfinder.d2r(90)),
-				new Waypoint(0, 3, Pathfinder.d2r(180)),
-				new Waypoint(-1.5, 1.5, Pathfinder.d2r(-90)),
-				new Waypoint(0, 0,0)
+				new Waypoint(.7, 0, Pathfinder.d2r(-45)),
+				new Waypoint(.7, -1.1, Pathfinder.d2r(-135)),
+				new Waypoint(0, -1.1, Pathfinder.d2r(-135)),
+				new Waypoint(0, -2.2, Pathfinder.d2r(-45)),
+				new Waypoint(.7, -2.2, Pathfinder.d2r(-45)),
+				new Waypoint(.7, -3.3, Pathfinder.d2r(-135)),
 		};
 		talonFrontLeft.setSelectedSensorPosition(0, 0, 0);
 		talonFrontRight.setSelectedSensorPosition(0, 0, 0);
@@ -130,23 +133,23 @@ public class Robot extends TimedRobot {
 		
 		if(auxStick.getRawButtonPressed(3)) {
 			double dt = 0.02;
-			double maxVelocity = 3.048;
+			double maxVelocity = .548;
 			double maxAcceleration = .7;
-			double maxJerk = 60.0;
+			double maxJerk = 10.0;
 			Trajectory.Config config = new Trajectory.Config(Trajectory.FitMethod.HERMITE_CUBIC,
 					Trajectory.Config.SAMPLES_FAST, dt, maxVelocity, maxAcceleration, maxJerk);
 			Trajectory trajectory = Pathfinder.generate(points, config);
 			double wheelbaseWidth = 0.584; //Distance between the two sides of DT, in meters.
 			TankModifier modifier = new TankModifier(trajectory).modify(wheelbaseWidth);
 			
-			left = new EncoderFollower(modifier.getLeftTrajectory());
-			right = new jaci.pathfinder.followers.EncoderFollower(modifier.getRightTrajectory());
+			left = new EncoderFollower(modifier.getLeftTrajectory(), "/home/lvuser/left.csv");
+			right = new EncoderFollower(modifier.getRightTrajectory(), "/home/lvuser/right.csv");
 			
 			//configureEncoder(encoderPosition, encoderTickPerRevolution, wheelDiameter)
 			left.configureEncoder(talonFrontLeft.getSelectedSensorPosition(0), 4096, .1524 / 1.07);
 			right.configureEncoder(talonFrontRight.getSelectedSensorPosition(0), 4096, .1524 / 1.07);
 		
-			double p = 1;
+			double p = 1.2;
 			double i = 0;
 			double d = 0.5;
 			double velocityInverse = 1 / maxVelocity;
@@ -163,7 +166,7 @@ public class Robot extends TimedRobot {
 		if(auxStick.getRawButton(3)) { 
 			if(!left.isFinished() && !right.isFinished()) {
 				double leftSpeed = left.calculate(talonFrontLeft.getSelectedSensorPosition(0), talonFrontLeft.getSelectedSensorVelocity(0) / 4096.0 * .1524 * Math.PI);
-				double rightSpeed = right.calculate(talonFrontRight.getSelectedSensorPosition(0));
+				double rightSpeed = right.calculate(talonFrontRight.getSelectedSensorPosition(0), talonFrontRight.getSelectedSensorVelocity(0));
 				double gyroHeading = vmx.getAngle();
 				double desiredHeading = Pathfinder.r2d(left.getHeading());
 				angleDifference = Pathfinder.boundHalfDegrees(desiredHeading + gyroHeading);
